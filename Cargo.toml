@@ -6,3 +6,11 @@ authors = ["Jack Grigg <thestr4d@gmail.com>"]
 license = "MIT OR Apache-2.0"
 edition = "2021"
 categories = ["cryptography"]
+
+[dependencies]
+curve25519-dalek = "3.2"
+rand_core = "0.5"
+sha2 = "0.10"
+
+[dev-dependencies]
+hex = "0.4"

@@ -11,3 +11,6 @@ categories = ["cryptography"]
 curve25519-dalek = "3.2"
 rand_core = "0.5"
 sha2 = "0.10"
+
+[dev-dependencies]
+hex = "0.4"

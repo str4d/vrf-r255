@@ -11,7 +11,7 @@ use rand_core::{CryptoRng, RngCore};
 use sha2::{Digest, Sha512};
 use subtle::{ConstantTimeEq, CtOption};
 
-// Constants from draft-irtf-cfrg-vrf-11.
+// Constants from draft-irtf-cfrg-vrf-15.
 const CHALLENGE_GENERATION_DOMAIN_SEPARATOR_FRONT: &[u8] = b"\x02";
 const CHALLENGE_GENERATION_DOMAIN_SEPARATOR_BACK: &[u8] = b"\x00";
 const PROOF_TO_HASH_DOMAIN_SEPARATOR_FRONT: &[u8] = b"\x03";
@@ -44,9 +44,9 @@ struct Challenge(Scalar);
 impl Challenge {
     /// Generates a challenge from the given ristretto255 group elements.
     ///
-    /// Implements [draft-irtf-cfrg-vrf-11 Section 5.4.3].
+    /// Implements [draft-irtf-cfrg-vrf-15 Section 5.4.3].
     ///
-    /// [draft-irtf-cfrg-vrf-11 Section 5.4.3]: https://www.ietf.org/archive/id/draft-irtf-cfrg-vrf-11.html#name-ecvrf-challenge-generation
+    /// [draft-irtf-cfrg-vrf-15 Section 5.4.3]: https://www.ietf.org/archive/id/draft-irtf-cfrg-vrf-15.html#name-ecvrf-challenge-generation
     fn generate(points: [RistrettoPoint; 5]) -> Self {
         let mut hasher = Hash::new_with_prefix(SUITE_STRING);
         hasher.update(CHALLENGE_GENERATION_DOMAIN_SEPARATOR_FRONT);
@@ -149,9 +149,9 @@ impl SecretKey {
     /// Generates a correctness proof for the unique VRF hash output derived from the
     /// given input and this secret key.
     ///
-    /// Implements [draft-irtf-cfrg-vrf-11 Section 5.1].
+    /// Implements [draft-irtf-cfrg-vrf-15 Section 5.1].
     ///
-    /// [draft-irtf-cfrg-vrf-11 Section 5.1]: https://www.ietf.org/archive/id/draft-irtf-cfrg-vrf-11.html#name-ecvrf-proving
+    /// [draft-irtf-cfrg-vrf-15 Section 5.1]: https://www.ietf.org/archive/id/draft-irtf-cfrg-vrf-15.html#name-ecvrf-proving
     pub fn prove(&self, alpha_string: &[u8]) -> Proof {
         let H = encode_to_curve(self.pk.Y_bytes.as_bytes(), alpha_string);
         let h_string = H.compress();
@@ -195,11 +195,11 @@ impl PublicKey {
     /// Returns `None` if the given bytes are not a valid encoding of a ristretto255 VRF
     /// public key (including the `validate_key = TRUE` check).
     ///
-    /// Implements lines 1-3 of [draft-irtf-cfrg-vrf-11 Section 5.3], and
-    /// [draft-irtf-cfrg-vrf-11 Section 5.4.5].
+    /// Implements lines 1-3 of [draft-irtf-cfrg-vrf-15 Section 5.3], and
+    /// [draft-irtf-cfrg-vrf-15 Section 5.4.5].
     ///
-    /// [draft-irtf-cfrg-vrf-11 Section 5.3]: https://www.ietf.org/archive/id/draft-irtf-cfrg-vrf-11.html#name-ecvrf-verifying
-    /// [draft-irtf-cfrg-vrf-11 Section 5.4.5]: https://www.ietf.org/archive/id/draft-irtf-cfrg-vrf-11.html#keycheck
+    /// [draft-irtf-cfrg-vrf-15 Section 5.3]: https://www.ietf.org/archive/id/draft-irtf-cfrg-vrf-15.html#name-ecvrf-verifying
+    /// [draft-irtf-cfrg-vrf-15 Section 5.4.5]: https://www.ietf.org/archive/id/draft-irtf-cfrg-vrf-15.html#keycheck
     pub fn from_bytes(bytes: [u8; 32]) -> Option<Self> {
         let Y_bytes = CompressedRistretto::from_slice(&bytes);
         Y_bytes
@@ -218,9 +218,9 @@ impl PublicKey {
     ///
     /// Returns the corresponding VRF hash output, or `None` if the proof is invalid.
     ///
-    /// Implements lines 7-11 of [draft-irtf-cfrg-vrf-11 Section 5.3].
+    /// Implements lines 7-11 of [draft-irtf-cfrg-vrf-15 Section 5.3].
     ///
-    /// [draft-irtf-cfrg-vrf-11 Section 5.3]: https://www.ietf.org/archive/id/draft-irtf-cfrg-vrf-11.html#name-ecvrf-verifying
+    /// [draft-irtf-cfrg-vrf-15 Section 5.3]: https://www.ietf.org/archive/id/draft-irtf-cfrg-vrf-15.html#name-ecvrf-verifying
     pub fn verify(&self, alpha_string: &[u8], pi: &Proof) -> CtOption<[u8; H_LEN]> {
         let H = encode_to_curve(self.Y_bytes.as_bytes(), alpha_string);
         let U = &pi.s * &B - pi.c.0 * self.Y;
@@ -257,9 +257,9 @@ impl Proof {
     /// Returns `None` if the given bytes are not a valid encoding of a ristretto255 VRF
     /// proof.
     ///
-    /// Implements [draft-irtf-cfrg-vrf-11 Section 5.4.4].
+    /// Implements [draft-irtf-cfrg-vrf-15 Section 5.4.4].
     ///
-    /// [draft-irtf-cfrg-vrf-11 Section 5.4.4]: https://www.ietf.org/archive/id/draft-irtf-cfrg-vrf-11.html#name-ecvrf-decode-proof
+    /// [draft-irtf-cfrg-vrf-15 Section 5.4.4]: https://www.ietf.org/archive/id/draft-irtf-cfrg-vrf-15.html#name-ecvrf-decode-proof
     pub fn from_bytes(pi_string: [u8; PT_LEN + C_LEN + Q_LEN]) -> Option<Self> {
         let Gamma = CompressedRistretto::from_slice(&pi_string[0..PT_LEN]).decompress()?;
         let c = Challenge::parse(pi_string[PT_LEN..PT_LEN + C_LEN].try_into().unwrap());
@@ -273,9 +273,9 @@ impl Proof {
 
     /// Returns the byte encoding of this proof.
     ///
-    /// Implements [line 8 of draft-irtf-cfrg-vrf-11 Section 5.1].
+    /// Implements [line 8 of draft-irtf-cfrg-vrf-15 Section 5.1].
     ///
-    /// [line 8 of draft-irtf-cfrg-vrf-11 Section 5.1]: https://www.ietf.org/archive/id/draft-irtf-cfrg-vrf-11.html#section-5.1-9.8
+    /// [line 8 of draft-irtf-cfrg-vrf-15 Section 5.1]: https://www.ietf.org/archive/id/draft-irtf-cfrg-vrf-15.html#section-5.1-9.8
     pub fn to_bytes(&self) -> [u8; PT_LEN + C_LEN + Q_LEN] {
         let mut pi_string = [0u8; PT_LEN + C_LEN + Q_LEN];
         pi_string[0..PT_LEN].copy_from_slice(self.Gamma.compress().as_bytes());
@@ -287,9 +287,9 @@ impl Proof {
     /// Derives the VRF hash output corresponding to the input for which this proof is
     /// valid.
     ///
-    /// Implements [draft-irtf-cfrg-vrf-11 Section 5.2].
+    /// Implements [draft-irtf-cfrg-vrf-15 Section 5.2].
     ///
-    /// [draft-irtf-cfrg-vrf-11 Section 5.2]: https://www.ietf.org/archive/id/draft-irtf-cfrg-vrf-11.html#name-ecvrf-proof-to-hash
+    /// [draft-irtf-cfrg-vrf-15 Section 5.2]: https://www.ietf.org/archive/id/draft-irtf-cfrg-vrf-15.html#name-ecvrf-proof-to-hash
     fn derive_hash(&self) -> [u8; H_LEN] {
         assert_eq!(Hash::output_size(), H_LEN);
         let mut beta_string = Hash::new_with_prefix(SUITE_STRING);

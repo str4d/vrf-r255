@@ -38,7 +38,7 @@ fn encode_to_curve(encode_to_curve_salt: &[u8], alpha_string: &[u8]) -> Ristrett
 }
 
 /// A challenge value, an integer in the range `[0..1 << (8 * C_LEN)]`.
-#[derive(Clone, Copy, Debug, Eq)]
+#[derive(Clone, Copy, Debug)]
 struct Challenge(Scalar);
 
 impl Challenge {
@@ -85,9 +85,10 @@ impl Challenge {
     }
 }
 
-impl PartialEq for Challenge {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
+impl ConstantTimeEq for Challenge {
+    fn ct_eq(&self, other: &Self) -> subtle::Choice {
+        // Challenges are guaranteed by construction to be length `C_LEN`.
+        self.0.as_bytes()[..C_LEN].ct_eq(&other.0.as_bytes()[..C_LEN])
     }
 }
 
@@ -216,31 +217,33 @@ impl PublicKey {
     /// Implements lines 7-11 of [draft-irtf-cfrg-vrf-11 Section 5.3].
     ///
     /// [draft-irtf-cfrg-vrf-11 Section 5.3]: https://www.ietf.org/archive/id/draft-irtf-cfrg-vrf-11.html#name-ecvrf-verifying
-    pub fn verify(&self, alpha_string: &[u8], pi: &Proof) -> Option<[u8; H_LEN]> {
+    pub fn verify(&self, alpha_string: &[u8], pi: &Proof) -> CtOption<[u8; H_LEN]> {
         let H = encode_to_curve(self.Y_bytes.as_bytes(), alpha_string);
         let U = pi.s * B - pi.c.0 * self.Y;
         let V = pi.s * H - pi.c.0 * pi.Gamma;
         let c_prime = Challenge::generate([self.Y, H, pi.Gamma, U, V]);
 
-        if pi.c == c_prime {
-            Some(pi.derive_hash())
-        } else {
-            None
-        }
+        CtOption::new(pi.derive_hash(), pi.c.ct_eq(&c_prime))
     }
 }
 
 /// A ristretto255 VRF proof.
-#[derive(Clone, Copy, Debug, Eq)]
+#[derive(Clone, Copy, Debug)]
 pub struct Proof {
     Gamma: RistrettoPoint,
     c: Challenge,
     s: Scalar,
 }
 
+impl ConstantTimeEq for Proof {
+    fn ct_eq(&self, other: &Self) -> subtle::Choice {
+        self.Gamma.ct_eq(&other.Gamma) & self.c.ct_eq(&other.c) & self.s.ct_eq(&other.s)
+    }
+}
+
 impl PartialEq for Proof {
     fn eq(&self, other: &Self) -> bool {
-        self.Gamma == other.Gamma && self.c == other.c && self.s == other.s
+        self.ct_eq(other).into()
     }
 }
 
@@ -342,6 +345,9 @@ mod tests {
 
         let pi = Proof::from_bytes(tv_pi.try_into().unwrap()).unwrap();
         assert_eq!(sk.prove(&tv_alpha), pi);
-        assert_eq!(pk.verify(&tv_alpha, &pi), Some(tv_beta.try_into().unwrap()));
+        assert_eq!(
+            pk.verify(&tv_alpha, &pi).unwrap(),
+            <[u8; H_LEN]>::try_from(tv_beta).unwrap()
+        );
     }
 }

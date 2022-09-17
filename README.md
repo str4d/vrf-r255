@@ -1,6 +1,8 @@
 # vrf-r255
 
-TBD
+Implementation of the [ECVRF-RISTRETTO255-SHA512](https://c2sp.org/vrf-r255)
+ciphersuite of the ECVRF construction specified in
+[draft-irtf-cfrg-vrf-11](https://www.ietf.org/archive/id/draft-irtf-cfrg-vrf-11.html)
 
 ## Minimum Supported Rust Version
 

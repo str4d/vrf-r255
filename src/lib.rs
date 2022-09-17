@@ -1,3 +1,4 @@
+#![deny(rustdoc::broken_intra_doc_links)]
 #![allow(non_snake_case)]
 
 use curve25519_dalek::{
@@ -56,10 +57,15 @@ impl Challenge {
         hasher.update(CHALLENGE_GENERATION_DOMAIN_SEPARATOR_BACK);
         let c_string = hasher.finalize();
 
-        Self::from_bytes(c_string[..C_LEN].try_into().unwrap())
+        Self::parse(c_string[..C_LEN].try_into().unwrap())
     }
 
-    fn from_bytes(c_string: [u8; C_LEN]) -> Self {
+    /// Parses a challenge from its byte encoding.
+    ///
+    /// Equivalent to `string_to_int(c_string)` for [`ECVRF-RISTRETTO255-SHA512`].
+    ///
+    /// [`ECVRF-RISTRETTO255-SHA512`]: https://c2sp.org/vrf-r255#ecvrf-ristretto255-sha512
+    fn parse(c_string: [u8; C_LEN]) -> Self {
         let mut tmp = [0; 32];
         tmp[0..C_LEN].copy_from_slice(&c_string);
         Challenge(
@@ -68,8 +74,13 @@ impl Challenge {
         )
     }
 
-    fn to_bytes(&self) -> [u8; C_LEN] {
-        self.0.to_bytes()[..C_LEN].try_into().unwrap()
+    /// Returns the byte encoding of this challenge.
+    ///
+    /// Equivalent to `int_to_string(c, cLen)` for [`ECVRF-RISTRETTO255-SHA512`].
+    ///
+    /// [`ECVRF-RISTRETTO255-SHA512`]: https://c2sp.org/vrf-r255#ecvrf-ristretto255-sha512
+    fn encode(&self) -> [u8; C_LEN] {
+        self.0.as_bytes()[..C_LEN].try_into().unwrap()
     }
 }
 
@@ -212,7 +223,7 @@ impl PublicKey {
         let c_prime = Challenge::generate([self.Y, H, pi.Gamma, U, V]);
 
         if pi.c == c_prime {
-            Some(pi.to_hash())
+            Some(pi.derive_hash())
         } else {
             None
         }
@@ -244,7 +255,7 @@ impl Proof {
     /// [draft-irtf-cfrg-vrf-11 Section 5.4.4]: https://www.ietf.org/archive/id/draft-irtf-cfrg-vrf-11.html#name-ecvrf-decode-proof
     pub fn from_bytes(pi_string: [u8; PT_LEN + C_LEN + Q_LEN]) -> Option<Self> {
         let Gamma = CompressedRistretto::from_slice(&pi_string[0..PT_LEN]).decompress()?;
-        let c = Challenge::from_bytes(pi_string[PT_LEN..PT_LEN + C_LEN].try_into().unwrap());
+        let c = Challenge::parse(pi_string[PT_LEN..PT_LEN + C_LEN].try_into().unwrap());
         let s = Scalar::from_canonical_bytes(
             pi_string[PT_LEN + C_LEN..PT_LEN + C_LEN + Q_LEN]
                 .try_into()
@@ -261,7 +272,7 @@ impl Proof {
     pub fn to_bytes(&self) -> [u8; PT_LEN + C_LEN + Q_LEN] {
         let mut pi_string = [0u8; PT_LEN + C_LEN + Q_LEN];
         pi_string[0..PT_LEN].copy_from_slice(self.Gamma.compress().as_bytes());
-        pi_string[PT_LEN..PT_LEN + C_LEN].copy_from_slice(&self.c.to_bytes());
+        pi_string[PT_LEN..PT_LEN + C_LEN].copy_from_slice(&self.c.encode());
         pi_string[PT_LEN + C_LEN..PT_LEN + C_LEN + Q_LEN].copy_from_slice(&self.s.to_bytes());
         pi_string
     }
@@ -272,7 +283,7 @@ impl Proof {
     /// Implements [draft-irtf-cfrg-vrf-11 Section 5.2].
     ///
     /// [draft-irtf-cfrg-vrf-11 Section 5.2]: https://www.ietf.org/archive/id/draft-irtf-cfrg-vrf-11.html#name-ecvrf-proof-to-hash
-    fn to_hash(&self) -> [u8; H_LEN] {
+    fn derive_hash(&self) -> [u8; H_LEN] {
         assert_eq!(Hash::output_size(), H_LEN);
         let mut beta_string = Hash::new_with_prefix(SUITE_STRING);
         beta_string.update(PROOF_TO_HASH_DOMAIN_SEPARATOR_FRONT);

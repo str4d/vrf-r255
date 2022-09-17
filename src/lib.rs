@@ -1,3 +1,4 @@
+#![deny(rustdoc::broken_intra_doc_links)]
 #![allow(non_snake_case)]
 
 use curve25519_dalek::{

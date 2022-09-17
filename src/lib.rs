@@ -2,13 +2,14 @@
 #![allow(non_snake_case)]
 
 use curve25519_dalek::{
-    constants::RISTRETTO_BASEPOINT_POINT,
-    ristretto::{CompressedRistretto, RistrettoPoint},
+    constants::RISTRETTO_BASEPOINT_TABLE,
+    ristretto::{CompressedRistretto, RistrettoBasepointTable, RistrettoPoint},
     scalar::Scalar,
     traits::Identity,
 };
 use rand_core::{CryptoRng, RngCore};
 use sha2::{Digest, Sha512};
+use subtle::{ConstantTimeEq, CtOption};
 
 // Constants from draft-irtf-cfrg-vrf-11.
 const CHALLENGE_GENERATION_DOMAIN_SEPARATOR_FRONT: &[u8] = b"\x02";
@@ -18,7 +19,7 @@ const PROOF_TO_HASH_DOMAIN_SEPARATOR_BACK: &[u8] = b"\x00";
 
 // Constants from https://c2sp.org/vrf-r255
 const SUITE_STRING: &[u8] = b"\xFFc2sp.org/vrf-r255";
-const B: RistrettoPoint = RISTRETTO_BASEPOINT_POINT;
+const B: RistrettoBasepointTable = RISTRETTO_BASEPOINT_TABLE;
 const PT_LEN: usize = 32;
 const C_LEN: usize = 16;
 const Q_LEN: usize = 32;
@@ -37,7 +38,7 @@ fn encode_to_curve(encode_to_curve_salt: &[u8], alpha_string: &[u8]) -> Ristrett
 }
 
 /// A challenge value, an integer in the range `[0..1 << (8 * C_LEN)]`.
-#[derive(Clone, Copy, Debug, Eq)]
+#[derive(Clone, Copy, Debug)]
 struct Challenge(Scalar);
 
 impl Challenge {
@@ -84,9 +85,10 @@ impl Challenge {
     }
 }
 
-impl PartialEq for Challenge {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
+impl ConstantTimeEq for Challenge {
+    fn ct_eq(&self, other: &Self) -> subtle::Choice {
+        // Challenges are guaranteed by construction to be length `C_LEN`.
+        self.0.as_bytes()[..C_LEN].ct_eq(&other.0.as_bytes()[..C_LEN])
     }
 }
 
@@ -101,8 +103,8 @@ impl PrivateKey {
     /// Generates a new private key from the given randomness source.
     pub fn generate<R: RngCore + CryptoRng>(mut rng: R) -> Self {
         let x = Scalar::random(&mut rng);
-        Self::from_scalar(x)
-            .expect("negligible probability of sampling zero unless the RNG is broken")
+        // Negligible probability of sampling zero unless the RNG is broken.
+        Self::from_scalar(x).unwrap()
     }
 
     /// Parses a private key from its byte encoding.
@@ -112,21 +114,20 @@ impl PrivateKey {
     pub fn from_bytes(bytes: [u8; 32]) -> Option<Self> {
         // curve25519-dalek does not provide a constant-time decoding operation.
         let x = Scalar::from_canonical_bytes(bytes)?;
-        Self::from_scalar(x)
+        Self::from_scalar(x).into()
     }
 
-    fn from_scalar(x: Scalar) -> Option<Self> {
-        // We require validate_key = TRUE
-        if x == Scalar::zero() {
-            return None;
-        }
-
-        let Y = x * B;
+    fn from_scalar(x: Scalar) -> CtOption<Self> {
+        let Y = &x * &B;
         let Y_bytes = Y.compress();
-        Some(PrivateKey {
-            x,
-            pk: PublicKey { Y, Y_bytes },
-        })
+        CtOption::new(
+            PrivateKey {
+                x,
+                pk: PublicKey { Y, Y_bytes },
+            },
+            // We require validate_key = TRUE.
+            !Y_bytes.ct_eq(&CompressedRistretto::identity()),
+        )
     }
 
     /// Returns the byte encoding of this private key.
@@ -156,7 +157,7 @@ impl PrivateKey {
         let h_string = H.compress();
         let Gamma = self.x * H;
         let k = self.generate_nonce(h_string.as_bytes());
-        let c = Challenge::generate([self.pk.Y, H, Gamma, k * B, k * H]);
+        let c = Challenge::generate([self.pk.Y, H, Gamma, &k * &B, k * H]);
         let s = k + c.0 * self.x;
 
         Proof { Gamma, c, s }
@@ -176,9 +177,15 @@ impl From<PrivateKey> for PublicKey {
     }
 }
 
+impl ConstantTimeEq for PublicKey {
+    fn ct_eq(&self, other: &Self) -> subtle::Choice {
+        self.Y_bytes.ct_eq(&other.Y_bytes)
+    }
+}
+
 impl PartialEq<PublicKey> for PublicKey {
     fn eq(&self, other: &PublicKey) -> bool {
-        self.Y_bytes == other.Y_bytes
+        self.ct_eq(other).into()
     }
 }
 
@@ -194,14 +201,12 @@ impl PublicKey {
     /// [draft-irtf-cfrg-vrf-11 Section 5.3]: https://www.ietf.org/archive/id/draft-irtf-cfrg-vrf-11.html#name-ecvrf-verifying
     /// [draft-irtf-cfrg-vrf-11 Section 5.4.5]: https://www.ietf.org/archive/id/draft-irtf-cfrg-vrf-11.html#keycheck
     pub fn from_bytes(bytes: [u8; 32]) -> Option<Self> {
-        CompressedRistretto::from_slice(&bytes)
+        let Y_bytes = CompressedRistretto::from_slice(&bytes);
+        Y_bytes
             .decompress()
             // We require validate_key = TRUE
-            .filter(|p| !p.eq(&RistrettoPoint::identity()))
-            .map(|Y| {
-                let Y_bytes = Y.compress();
-                PublicKey { Y, Y_bytes }
-            })
+            .filter(|_| !Y_bytes.eq(&CompressedRistretto::identity()))
+            .map(|Y| PublicKey { Y, Y_bytes })
     }
 
     /// Returns the byte encoding of this public key.
@@ -216,31 +221,33 @@ impl PublicKey {
     /// Implements lines 7-11 of [draft-irtf-cfrg-vrf-11 Section 5.3].
     ///
     /// [draft-irtf-cfrg-vrf-11 Section 5.3]: https://www.ietf.org/archive/id/draft-irtf-cfrg-vrf-11.html#name-ecvrf-verifying
-    pub fn verify(&self, alpha_string: &[u8], pi: &Proof) -> Option<[u8; H_LEN]> {
+    pub fn verify(&self, alpha_string: &[u8], pi: &Proof) -> CtOption<[u8; H_LEN]> {
         let H = encode_to_curve(self.Y_bytes.as_bytes(), alpha_string);
-        let U = pi.s * B - pi.c.0 * self.Y;
+        let U = &pi.s * &B - pi.c.0 * self.Y;
         let V = pi.s * H - pi.c.0 * pi.Gamma;
         let c_prime = Challenge::generate([self.Y, H, pi.Gamma, U, V]);
 
-        if pi.c == c_prime {
-            Some(pi.derive_hash())
-        } else {
-            None
-        }
+        CtOption::new(pi.derive_hash(), pi.c.ct_eq(&c_prime))
     }
 }
 
 /// A ristretto255 VRF proof.
-#[derive(Clone, Copy, Debug, Eq)]
+#[derive(Clone, Copy, Debug)]
 pub struct Proof {
     Gamma: RistrettoPoint,
     c: Challenge,
     s: Scalar,
 }
 
+impl ConstantTimeEq for Proof {
+    fn ct_eq(&self, other: &Self) -> subtle::Choice {
+        self.Gamma.ct_eq(&other.Gamma) & self.c.ct_eq(&other.c) & self.s.ct_eq(&other.s)
+    }
+}
+
 impl PartialEq for Proof {
     fn eq(&self, other: &Self) -> bool {
-        self.Gamma == other.Gamma && self.c == other.c && self.s == other.s
+        self.ct_eq(other).into()
     }
 }
 
@@ -337,11 +344,14 @@ mod tests {
 
         let U = CompressedRistretto::from_slice(&tv_U).decompress().unwrap();
         let V = CompressedRistretto::from_slice(&tv_V).decompress().unwrap();
-        assert_eq!(k * B, U);
+        assert_eq!(&k * &B, U);
         assert_eq!(k * H, V);
 
         let pi = Proof::from_bytes(tv_pi.try_into().unwrap()).unwrap();
         assert_eq!(sk.prove(&tv_alpha), pi);
-        assert_eq!(pk.verify(&tv_alpha, &pi), Some(tv_beta.try_into().unwrap()));
+        assert_eq!(
+            pk.verify(&tv_alpha, &pi).unwrap(),
+            <[u8; H_LEN]>::try_from(tv_beta).unwrap()
+        );
     }
 }

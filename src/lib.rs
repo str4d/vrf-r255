@@ -177,9 +177,15 @@ impl From<PrivateKey> for PublicKey {
     }
 }
 
+impl ConstantTimeEq for PublicKey {
+    fn ct_eq(&self, other: &Self) -> subtle::Choice {
+        self.Y_bytes.ct_eq(&other.Y_bytes)
+    }
+}
+
 impl PartialEq<PublicKey> for PublicKey {
     fn eq(&self, other: &PublicKey) -> bool {
-        self.Y_bytes == other.Y_bytes
+        self.ct_eq(other).into()
     }
 }
 

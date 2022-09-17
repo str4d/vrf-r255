@@ -9,6 +9,7 @@ use curve25519_dalek::{
 };
 use rand_core::{CryptoRng, RngCore};
 use sha2::{Digest, Sha512};
+use subtle::{ConstantTimeEq, CtOption};
 
 // Constants from draft-irtf-cfrg-vrf-11.
 const CHALLENGE_GENERATION_DOMAIN_SEPARATOR_FRONT: &[u8] = b"\x02";
@@ -101,8 +102,8 @@ impl PrivateKey {
     /// Generates a new private key from the given randomness source.
     pub fn generate<R: RngCore + CryptoRng>(mut rng: R) -> Self {
         let x = Scalar::random(&mut rng);
-        Self::from_scalar(x)
-            .expect("negligible probability of sampling zero unless the RNG is broken")
+        // Negligible probability of sampling zero unless the RNG is broken.
+        Self::from_scalar(x).unwrap()
     }
 
     /// Parses a private key from its byte encoding.
@@ -112,21 +113,20 @@ impl PrivateKey {
     pub fn from_bytes(bytes: [u8; 32]) -> Option<Self> {
         // curve25519-dalek does not provide a constant-time decoding operation.
         let x = Scalar::from_canonical_bytes(bytes)?;
-        Self::from_scalar(x)
+        Self::from_scalar(x).into()
     }
 
-    fn from_scalar(x: Scalar) -> Option<Self> {
-        // We require validate_key = TRUE
-        if x == Scalar::zero() {
-            return None;
-        }
-
+    fn from_scalar(x: Scalar) -> CtOption<Self> {
         let Y = x * B;
         let Y_bytes = Y.compress();
-        Some(PrivateKey {
-            x,
-            pk: PublicKey { Y, Y_bytes },
-        })
+        CtOption::new(
+            PrivateKey {
+                x,
+                pk: PublicKey { Y, Y_bytes },
+            },
+            // We require validate_key = TRUE.
+            !Y_bytes.ct_eq(&CompressedRistretto::identity()),
+        )
     }
 
     /// Returns the byte encoding of this private key.

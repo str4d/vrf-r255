@@ -1,14 +1,14 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use rand_core::OsRng;
-use vrf_r255::{PrivateKey, Proof, PublicKey};
+use vrf_r255::{Proof, PublicKey, SecretKey};
 
 fn encoding(c: &mut Criterion) {
-    let sk = PrivateKey::generate(OsRng);
+    let sk = SecretKey::generate(OsRng);
     let sk_bytes = sk.to_bytes();
-    c.bench_function("privatekey-from-bytes", |b| {
-        b.iter(|| PrivateKey::from_bytes(sk_bytes))
+    c.bench_function("secretkey-from-bytes", |b| {
+        b.iter(|| SecretKey::from_bytes(sk_bytes))
     });
-    c.bench_function("privatekey-to-bytes", |b| b.iter(|| sk.to_bytes()));
+    c.bench_function("secretkey-to-bytes", |b| b.iter(|| sk.to_bytes()));
 
     let pk = PublicKey::from(sk);
     let pk_bytes = pk.to_bytes();
@@ -26,7 +26,7 @@ fn encoding(c: &mut Criterion) {
 }
 
 fn prove(c: &mut Criterion) {
-    let sk = PrivateKey::generate(OsRng);
+    let sk = SecretKey::generate(OsRng);
 
     let alpha = [42; 512 * 1024];
     for alpha_len in [32, 512, 1024, alpha.len()] {
@@ -39,10 +39,10 @@ fn prove(c: &mut Criterion) {
 }
 
 fn verify(c: &mut Criterion) {
-    let sk = PrivateKey::generate(OsRng);
+    let sk = SecretKey::generate(OsRng);
     let pk = PublicKey::from(sk);
 
-    let invalid_pk = PublicKey::from(PrivateKey::generate(OsRng));
+    let invalid_pk = PublicKey::from(SecretKey::generate(OsRng));
 
     let alpha = [42; 512 * 1024];
     for alpha_len in [32, 512, 1024, alpha.len()] {

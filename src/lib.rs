@@ -92,25 +92,25 @@ impl ConstantTimeEq for Challenge {
     }
 }
 
-/// A private key for the ristretto255 VRF.
+/// A secret key for the ristretto255 VRF.
 #[derive(Clone, Copy, Debug)]
-pub struct PrivateKey {
+pub struct SecretKey {
     x: Scalar,
     pk: PublicKey,
 }
 
-impl PrivateKey {
-    /// Generates a new private key from the given randomness source.
+impl SecretKey {
+    /// Generates a new secret key from the given randomness source.
     pub fn generate<R: RngCore + CryptoRng>(mut rng: R) -> Self {
         let x = Scalar::random(&mut rng);
         // Negligible probability of sampling zero unless the RNG is broken.
         Self::from_scalar(x).unwrap()
     }
 
-    /// Parses a private key from its byte encoding.
+    /// Parses a secret key from its byte encoding.
     ///
     /// Returns `None` if the given bytes are not a valid encoding of a ristretto255 VRF
-    /// private key.
+    /// secret key.
     pub fn from_bytes(bytes: [u8; 32]) -> Option<Self> {
         // curve25519-dalek does not provide a constant-time decoding operation.
         let x = Scalar::from_canonical_bytes(bytes)?;
@@ -121,7 +121,7 @@ impl PrivateKey {
         let Y = &x * &B;
         let Y_bytes = Y.compress();
         CtOption::new(
-            PrivateKey {
+            SecretKey {
                 x,
                 pk: PublicKey { Y, Y_bytes },
             },
@@ -130,12 +130,12 @@ impl PrivateKey {
         )
     }
 
-    /// Returns the byte encoding of this private key.
+    /// Returns the byte encoding of this secret key.
     pub fn to_bytes(&self) -> [u8; 32] {
         self.x.to_bytes()
     }
 
-    /// Generates a deterministic nonce from this private key and the given input.
+    /// Generates a deterministic nonce from this secret key and the given input.
     ///
     /// Implements https://c2sp.org/vrf-r255#nonce-generation.
     fn generate_nonce(&self, h_string: &[u8]) -> Scalar {
@@ -147,7 +147,7 @@ impl PrivateKey {
     }
 
     /// Generates a correctness proof for the unique VRF hash output derived from the
-    /// given input and this private key.
+    /// given input and this secret key.
     ///
     /// Implements [draft-irtf-cfrg-vrf-11 Section 5.1].
     ///
@@ -171,8 +171,8 @@ pub struct PublicKey {
     Y_bytes: CompressedRistretto,
 }
 
-impl From<PrivateKey> for PublicKey {
-    fn from(sk: PrivateKey) -> Self {
+impl From<SecretKey> for PublicKey {
+    fn from(sk: SecretKey) -> Self {
         sk.pk
     }
 }
@@ -328,7 +328,7 @@ mod tests {
         let tv_pi = hex::decode(tv_pi).unwrap();
         let tv_beta = hex::decode(tv_beta).unwrap();
 
-        let sk = PrivateKey::from_bytes(tv_sk.try_into().unwrap()).unwrap();
+        let sk = SecretKey::from_bytes(tv_sk.try_into().unwrap()).unwrap();
         let pk = PublicKey::from_bytes(tv_pk.try_into().unwrap()).unwrap();
         assert_eq!(PublicKey::from(sk), pk);
 

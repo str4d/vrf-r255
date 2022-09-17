@@ -2,8 +2,8 @@
 #![allow(non_snake_case)]
 
 use curve25519_dalek::{
-    constants::RISTRETTO_BASEPOINT_POINT,
-    ristretto::{CompressedRistretto, RistrettoPoint},
+    constants::RISTRETTO_BASEPOINT_TABLE,
+    ristretto::{CompressedRistretto, RistrettoBasepointTable, RistrettoPoint},
     scalar::Scalar,
     traits::Identity,
 };
@@ -19,7 +19,7 @@ const PROOF_TO_HASH_DOMAIN_SEPARATOR_BACK: &[u8] = b"\x00";
 
 // Constants from https://c2sp.org/vrf-r255
 const SUITE_STRING: &[u8] = b"\xFFc2sp.org/vrf-r255";
-const B: RistrettoPoint = RISTRETTO_BASEPOINT_POINT;
+const B: RistrettoBasepointTable = RISTRETTO_BASEPOINT_TABLE;
 const PT_LEN: usize = 32;
 const C_LEN: usize = 16;
 const Q_LEN: usize = 32;
@@ -118,7 +118,7 @@ impl PrivateKey {
     }
 
     fn from_scalar(x: Scalar) -> CtOption<Self> {
-        let Y = x * B;
+        let Y = &x * &B;
         let Y_bytes = Y.compress();
         CtOption::new(
             PrivateKey {
@@ -157,7 +157,7 @@ impl PrivateKey {
         let h_string = H.compress();
         let Gamma = self.x * H;
         let k = self.generate_nonce(h_string.as_bytes());
-        let c = Challenge::generate([self.pk.Y, H, Gamma, k * B, k * H]);
+        let c = Challenge::generate([self.pk.Y, H, Gamma, &k * &B, k * H]);
         let s = k + c.0 * self.x;
 
         Proof { Gamma, c, s }
@@ -225,7 +225,7 @@ impl PublicKey {
     /// [draft-irtf-cfrg-vrf-11 Section 5.3]: https://www.ietf.org/archive/id/draft-irtf-cfrg-vrf-11.html#name-ecvrf-verifying
     pub fn verify(&self, alpha_string: &[u8], pi: &Proof) -> CtOption<[u8; H_LEN]> {
         let H = encode_to_curve(self.Y_bytes.as_bytes(), alpha_string);
-        let U = pi.s * B - pi.c.0 * self.Y;
+        let U = &pi.s * &B - pi.c.0 * self.Y;
         let V = pi.s * H - pi.c.0 * pi.Gamma;
         let c_prime = Challenge::generate([self.Y, H, pi.Gamma, U, V]);
 
@@ -346,7 +346,7 @@ mod tests {
 
         let U = CompressedRistretto::from_slice(&tv_U).decompress().unwrap();
         let V = CompressedRistretto::from_slice(&tv_V).decompress().unwrap();
-        assert_eq!(k * B, U);
+        assert_eq!(&k * &B, U);
         assert_eq!(k * H, V);
 
         let pi = Proof::from_bytes(tv_pi.try_into().unwrap()).unwrap();

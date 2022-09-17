@@ -201,14 +201,12 @@ impl PublicKey {
     /// [draft-irtf-cfrg-vrf-11 Section 5.3]: https://www.ietf.org/archive/id/draft-irtf-cfrg-vrf-11.html#name-ecvrf-verifying
     /// [draft-irtf-cfrg-vrf-11 Section 5.4.5]: https://www.ietf.org/archive/id/draft-irtf-cfrg-vrf-11.html#keycheck
     pub fn from_bytes(bytes: [u8; 32]) -> Option<Self> {
-        CompressedRistretto::from_slice(&bytes)
+        let Y_bytes = CompressedRistretto::from_slice(&bytes);
+        Y_bytes
             .decompress()
             // We require validate_key = TRUE
-            .filter(|p| !p.eq(&RistrettoPoint::identity()))
-            .map(|Y| {
-                let Y_bytes = Y.compress();
-                PublicKey { Y, Y_bytes }
-            })
+            .filter(|_| !Y_bytes.eq(&CompressedRistretto::identity()))
+            .map(|Y| PublicKey { Y, Y_bytes })
     }
 
     /// Returns the byte encoding of this public key.

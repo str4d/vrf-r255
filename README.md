@@ -1,8 +1,18 @@
 # vrf-r255
 
-Implementation of the [ECVRF-RISTRETTO255-SHA512](https://c2sp.org/vrf-r255)
-ciphersuite of the ECVRF construction specified in
-[RFC 9381](https://www.rfc-editor.org/rfc/rfc9381.html).
+This crate provides an [RFC 9381] Verifiable Random Function (VRF), which is the
+public key version of a keyed cryptographic hash. Only the holder of the secret
+key can compute the hash, but anyone with the public key can verify the
+correctness of the hash.
+
+`vrf-r255` is built on the ristretto255 group specified in [RFC 9496]. More
+specifically, it is an implementation of the [ECVRF-RISTRETTO255-SHA512]
+ciphersuite of the [RFC 9381 ECVRF construction].
+
+[RFC 9381]: https://www.rfc-editor.org/rfc/rfc9381.html
+[RFC 9496]: https://www.rfc-editor.org/rfc/rfc9496.html
+[ECVRF-RISTRETTO255-SHA512]: https://c2sp.org/vrf-r255
+[RFC 9381 ECVRF construction]: https://www.rfc-editor.org/rfc/rfc9381.html#name-elliptic-curve-vrf-ecvrf
 
 ## Minimum Supported Rust Version
 

@@ -2,7 +2,7 @@
 
 Implementation of the [ECVRF-RISTRETTO255-SHA512](https://c2sp.org/vrf-r255)
 ciphersuite of the ECVRF construction specified in
-[draft-irtf-cfrg-vrf-15](https://www.ietf.org/archive/id/draft-irtf-cfrg-vrf-15.html)
+[RFC 9381](https://www.rfc-editor.org/rfc/rfc9381.html).
 
 ## Minimum Supported Rust Version
 

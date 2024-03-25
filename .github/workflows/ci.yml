@@ -9,18 +9,16 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macOS-latest]
-
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Run tests
         run: cargo test
 
   bitrot:
     name: Bitrot check
     runs-on: ubuntu-latest
-
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       # Build benchmarks and examples to prevent bitrot
       - name: cargo check
         run: cargo check --tests --examples --benches
@@ -28,9 +26,8 @@ jobs:
   clippy:
     name: Clippy (MSRV)
     runs-on: ubuntu-latest
-
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Clippy check
         uses: actions-rs/clippy-check@v1
         with:
@@ -41,9 +38,8 @@ jobs:
   doc-links:
     name: Intra-doc links
     runs-on: ubuntu-latest
-
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - run: cargo fetch
       # Requires #![deny(intra_doc_link_resolution_failure)] in crates.
       - name: Check intra-doc links
@@ -53,6 +49,6 @@ jobs:
     name: Rustfmt
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Check formatting
         run: cargo fmt -- --check

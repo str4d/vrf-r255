@@ -12,10 +12,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: 1.57.0
-          override: true
       - name: Run tests
         uses: actions-rs/cargo@v1
         with:
@@ -27,10 +23,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: 1.57.0
-          override: true
       # Build benchmarks and examples to prevent bitrot
       - name: cargo check
         uses: actions-rs/cargo@v1
@@ -39,20 +31,15 @@ jobs:
           args: --tests --examples --benches
 
   clippy:
-    name: Clippy (1.57.0)
+    name: Clippy (MSRV)
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: 1.57.0
-          components: clippy
-          override: true
       - name: Clippy check
         uses: actions-rs/clippy-check@v1
         with:
-          name: Clippy (1.57.0)
+          name: Clippy (MSRV)
           token: ${{ secrets.GITHUB_TOKEN }}
           args: --all-features --all-targets -- -D warnings
 
@@ -62,10 +49,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: 1.57.0
-          override: true
       - name: cargo fetch
         uses: actions-rs/cargo@v1
         with:
@@ -82,14 +65,8 @@ jobs:
   fmt:
     name: Rustfmt
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: 1.57.0
-          components: rustfmt
-          override: true
       - name: Check formatting
         uses: actions-rs/cargo@v1
         with:

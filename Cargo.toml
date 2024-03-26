@@ -5,18 +5,19 @@ version = "0.0.0"
 authors = ["Jack Grigg <thestr4d@gmail.com>"]
 license = "MIT OR Apache-2.0"
 edition = "2021"
-rust-version = "1.57"
+rust-version = "1.60"
 categories = ["cryptography"]
 
 [dependencies]
-curve25519-dalek = "3.2"
-rand_core = "0.5"
+curve25519-dalek = { version = "4", features = ["rand_core"] }
+rand_core = "0.6"
 sha2 = "0.10"
 subtle = "2.4"
 
 [dev-dependencies]
 criterion = "0.4"
 hex = "0.4"
+rand_core = { version = "0.6", features = ["getrandom"] }
 
 [[bench]]
 name = "benchmarks"

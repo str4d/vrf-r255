@@ -3,7 +3,7 @@
 
 use curve25519_dalek::{
     constants::RISTRETTO_BASEPOINT_TABLE,
-    ristretto::{CompressedRistretto, RistrettoBasepointTable, RistrettoPoint},
+    ristretto::{CompressedRistretto, RistrettoPoint},
     scalar::Scalar,
     traits::Identity,
 };
@@ -19,7 +19,7 @@ const PROOF_TO_HASH_DOMAIN_SEPARATOR_BACK: &[u8] = b"\x00";
 
 // Constants from https://c2sp.org/vrf-r255
 const SUITE_STRING: &[u8] = b"\xFFc2sp.org/vrf-r255";
-const B: RistrettoBasepointTable = RISTRETTO_BASEPOINT_TABLE;
+use RISTRETTO_BASEPOINT_TABLE as B;
 const PT_LEN: usize = 32;
 const C_LEN: usize = 16;
 const Q_LEN: usize = 32;
@@ -69,10 +69,8 @@ impl Challenge {
     fn parse(c_string: [u8; C_LEN]) -> Self {
         let mut tmp = [0; 32];
         tmp[0..C_LEN].copy_from_slice(&c_string);
-        Challenge(
-            Scalar::from_canonical_bytes(tmp)
-                .expect("Byte strings of length C_LEN are always canonical"),
-        )
+        // Byte strings of length C_LEN are always canonical.
+        Challenge(Scalar::from_canonical_bytes(tmp).unwrap())
     }
 
     /// Returns the byte encoding of this challenge.
@@ -111,14 +109,13 @@ impl SecretKey {
     ///
     /// Returns `None` if the given bytes are not a valid encoding of a ristretto255 VRF
     /// secret key.
-    pub fn from_bytes(bytes: [u8; 32]) -> Option<Self> {
-        // curve25519-dalek does not provide a constant-time decoding operation.
-        let x = Scalar::from_canonical_bytes(bytes)?;
-        Self::from_scalar(x).into()
+    pub fn from_bytes(bytes: [u8; 32]) -> CtOption<Self> {
+        let x = Scalar::from_canonical_bytes(bytes);
+        x.and_then(Self::from_scalar)
     }
 
     fn from_scalar(x: Scalar) -> CtOption<Self> {
-        let Y = &x * &B;
+        let Y = &x * B;
         let Y_bytes = Y.compress();
         CtOption::new(
             SecretKey {
@@ -157,7 +154,7 @@ impl SecretKey {
         let h_string = H.compress();
         let Gamma = self.x * H;
         let k = self.generate_nonce(h_string.as_bytes());
-        let c = Challenge::generate([self.pk.Y, H, Gamma, &k * &B, k * H]);
+        let c = Challenge::generate([self.pk.Y, H, Gamma, &k * B, k * H]);
         let s = k + c.0 * self.x;
 
         Proof { Gamma, c, s }
@@ -202,7 +199,7 @@ impl PublicKey {
     /// [RFC 9381 Section 5.3]: https://www.rfc-editor.org/rfc/rfc9381.html#name-ecvrf-verifying
     /// [RFC 9381 Section 5.4.5]: https://www.rfc-editor.org/rfc/rfc9381.html#name-ecvrf-validate-key
     pub fn from_bytes(bytes: [u8; 32]) -> Option<Self> {
-        let Y_bytes = CompressedRistretto::from_slice(&bytes);
+        let Y_bytes = CompressedRistretto(bytes);
         Y_bytes
             .decompress()
             // We require validate_key = TRUE
@@ -225,7 +222,7 @@ impl PublicKey {
     /// [RFC 9381 Section 5.3]: https://www.rfc-editor.org/rfc/rfc9381.html#name-ecvrf-verifying
     pub fn verify(&self, alpha_string: &[u8], pi: &Proof) -> CtOption<[u8; H_LEN]> {
         let H = encode_to_curve(self.Y_bytes.as_bytes(), alpha_string);
-        let U = &pi.s * &B - pi.c.0 * self.Y;
+        let U = &pi.s * B - pi.c.0 * self.Y;
         let V = pi.s * H - pi.c.0 * pi.Gamma;
         let c_prime = Challenge::generate([self.Y, H, pi.Gamma, U, V]);
 
@@ -263,14 +260,15 @@ impl Proof {
     ///
     /// [RFC 9381 Section 5.4.4]: https://www.rfc-editor.org/rfc/rfc9381.html#name-ecvrf-decode-proof
     pub fn from_bytes(pi_string: [u8; PT_LEN + C_LEN + Q_LEN]) -> Option<Self> {
-        let Gamma = CompressedRistretto::from_slice(&pi_string[0..PT_LEN]).decompress()?;
+        let Gamma = CompressedRistretto(pi_string[0..PT_LEN].try_into().expect("correct length"))
+            .decompress();
         let c = Challenge::parse(pi_string[PT_LEN..PT_LEN + C_LEN].try_into().unwrap());
         let s = Scalar::from_canonical_bytes(
             pi_string[PT_LEN + C_LEN..PT_LEN + C_LEN + Q_LEN]
                 .try_into()
                 .unwrap(),
-        )?;
-        Some(Proof { Gamma, c, s })
+        );
+        Gamma.zip(s.into()).map(|(Gamma, s)| Proof { Gamma, c, s })
     }
 
     /// Returns the byte encoding of this proof.
@@ -335,7 +333,10 @@ mod tests {
         let pk = PublicKey::from_bytes(tv_pk.try_into().unwrap()).unwrap();
         assert_eq!(PublicKey::from(sk), pk);
 
-        let H = CompressedRistretto::from_slice(&tv_H).decompress().unwrap();
+        let H = CompressedRistretto::from_slice(&tv_H)
+            .unwrap()
+            .decompress()
+            .unwrap();
         assert_eq!(encode_to_curve(pk.Y_bytes.as_bytes(), &tv_alpha), H);
 
         let k = Scalar::from_canonical_bytes(tv_k.try_into().unwrap()).unwrap();
@@ -345,9 +346,15 @@ mod tests {
         );
         assert_eq!(sk.generate_nonce(H.compress().as_bytes()), k);
 
-        let U = CompressedRistretto::from_slice(&tv_U).decompress().unwrap();
-        let V = CompressedRistretto::from_slice(&tv_V).decompress().unwrap();
-        assert_eq!(&k * &B, U);
+        let U = CompressedRistretto::from_slice(&tv_U)
+            .unwrap()
+            .decompress()
+            .unwrap();
+        let V = CompressedRistretto::from_slice(&tv_V)
+            .unwrap()
+            .decompress()
+            .unwrap();
+        assert_eq!(&k * B, U);
         assert_eq!(k * H, V);
 
         let pi = Proof::from_bytes(tv_pi.try_into().unwrap()).unwrap();
